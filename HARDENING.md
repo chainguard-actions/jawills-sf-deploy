@@ -8,29 +8,35 @@
 
 **Harden Agent Version:** `1`
 
-Action **jawills--sf-deploy/v1.0** was hardened automatically. 6 finding(s) were identified and resolved across 1 iteration(s).
+Action **jawills--sf-deploy/v1.0** was hardened automatically. 8 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-Multiple `run:` steps in action.yml directly interpolate `inputs.*` expressions into shell commands without first assigning them to environment variables. An attacker who controls these input values can inject arbitrary shell commands.
-
-- Line 43 (Login to Environment): `${{ inputs.SFDX_AUTH_URL }}` interpolated directly into `sf org login` command
-- Line 47 (Generate package.xml): `${{ inputs.SOURCE_DIRECTORY }}` interpolated directly into `sf project generate manifest`
-- Line 53 (Deploy to Environment): `${{ inputs.WAIT }}` interpolated directly into shell array
-- Line 54 (Deploy to Environment): `${{ inputs.TEST_LEVEL }}` interpolated directly into shell array
-- Line 57 (Deploy to Environment): `${{ inputs.DRY_RUN }}` interpolated directly into shell conditional
-
-Fix: assign each input to an env var (e.g. `env: SFDX_AUTH_URL: ${{ inputs.SFDX_AUTH_URL }}`) and reference `$SFDX_AUTH_URL` in the run block instead.
+The 'Login to Environment' step directly interpolates `${{ inputs.SFDX_AUTH_URL }}` inside a `run:` shell command. An attacker-controlled input value is embedded directly into the shell string, enabling arbitrary command injection. The input should be assigned to an environment variable via `env:` and referenced as `$SFDX_AUTH_URL` instead.
 
 Locations:
 
 - `action.yml:43`
+
+### script-injection (severity: high)
+
+The 'Generate package.xml' step directly interpolates `${{ inputs.SOURCE_DIRECTORY }}` inside a `run:` shell command. An attacker-controlled input value is embedded directly into the shell string, enabling arbitrary command injection (e.g. path traversal or shell metacharacters). The input should be assigned to an environment variable via `env:` and referenced as `$SOURCE_DIRECTORY` instead.
+
+Locations:
+
 - `action.yml:47`
+
+### script-injection (severity: high)
+
+The 'Deploy to Environment' step directly interpolates `${{ inputs.WAIT }}`, `${{ inputs.TEST_LEVEL }}`, and `${{ inputs.DRY_RUN }}` inside a `run:` shell command. Attacker-controlled input values are embedded directly into the shell string, enabling arbitrary command injection via shell metacharacters. All three inputs should be assigned to environment variables via `env:` and referenced as shell variables instead.
+
+Locations:
+
+- `action.yml:52`
 - `action.yml:53`
-- `action.yml:54`
-- `action.yml:57`
+- `action.yml:56`
 
 ### static-inline-injection (severity: high)
 
@@ -80,8 +86,8 @@ Locations:
 
 **Notes:**
 
-Fixed all 6 script injection findings in action.yml by moving all ${{ inputs.* }} expressions out of run: blocks and into env: blocks for each affected step:
-1. 'Login to Environment': Added env block with SFDX_AUTH_URL=${{ inputs.SFDX_AUTH_URL }}, replaced inline expression with $SFDX_AUTH_URL
-2. 'Generate package.xml': Added env block with SOURCE_DIRECTORY=${{ inputs.SOURCE_DIRECTORY }}, replaced inline expression with "$SOURCE_DIRECTORY"
-3. 'Deploy to Environment': Added env block with WAIT=${{ inputs.WAIT }}, TEST_LEVEL=${{ inputs.TEST_LEVEL }}, DRY_RUN=${{ inputs.DRY_RUN }}, replaced all inline expressions with their corresponding environment variable references
+Fixed all 8 findings (3 script-injection + 5 static-inline-injection) across 3 steps in action.yml:
+1. 'Login to Environment': moved `${{ inputs.SFDX_AUTH_URL }}` to `env: SFDX_AUTH_URL:` and referenced as `$SFDX_AUTH_URL` in the run block.
+2. 'Generate package.xml': moved `${{ inputs.SOURCE_DIRECTORY }}` to `env: SOURCE_DIRECTORY:` and referenced as `"$SOURCE_DIRECTORY"` in the run block.
+3. 'Deploy to Environment': moved `${{ inputs.WAIT }}`, `${{ inputs.TEST_LEVEL }}`, and `${{ inputs.DRY_RUN }}` to `env:` block and referenced as `"$WAIT"`, `"$TEST_LEVEL"`, and `"$DRY_RUN"` respectively in the run block.
 

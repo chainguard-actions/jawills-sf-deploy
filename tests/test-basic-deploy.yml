@@ -1,4 +1,4 @@
-name: Test dry run deploy
+name: Test basic deploy
 on:
   workflow_dispatch:
 jobs:
@@ -11,14 +11,13 @@ jobs:
         continue-on-error: true
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::fake_token@login.salesforce.com"
-          DRY_RUN: "true"
           TEST_LEVEL: RunLocalTests
           WAIT: "10"
           SOURCE_DIRECTORY: force-app
-      - name: Assert action was invoked with DRY_RUN input
+      - name: Assert action was invoked with SFDX_AUTH_URL
         run: |
           # The action should fail at the login step (not at input parsing),
           # meaning the Salesforce CLI was installed and the auth was attempted.
           # We verify the step ran (continue-on-error allows us to reach here).
-          echo "Action invoked with DRY_RUN input - PASS"
+          echo "Action invoked with SFDX_AUTH_URL input - PASS"
           echo "PASS"

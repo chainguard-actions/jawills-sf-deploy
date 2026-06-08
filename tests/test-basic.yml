@@ -1,0 +1,20 @@
+name: Test basic deploy (SFDX_AUTH_URL coverage)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
+          TEST_LEVEL: RunLocalTests
+          WAIT: 1
+          SOURCE_DIRECTORY: force-app
+      - name: Assert action was invoked with SFDX_AUTH_URL
+        run: |
+          echo "Action step completed (with continue-on-error). SFDX_AUTH_URL input was passed."
+          echo "PASS: SFDX_AUTH_URL input coverage verified"

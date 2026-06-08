@@ -8,6 +8,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 
 | Version | Tag | Upstream commit |
 |---------|-----|-----------------|
+| v0.3 | [`v0.3`](https://github.com/chainguard-actions/jawills-sf-deploy/tree/v0.3) | [`27f820c`](https://github.com/jawills/sf-deploy/commit/27f820c5667ec0b511139f6cd6b70f833ae4d011) |
 | v0.4 | [`v0.4`](https://github.com/chainguard-actions/jawills-sf-deploy/tree/v0.4) | [`8cc73ce`](https://github.com/jawills/sf-deploy/commit/8cc73ced6e1ad109f6ced2d7692c3ae83f159a90) |
 | v1.0 | [`v1.0`](https://github.com/chainguard-actions/jawills-sf-deploy/tree/v1.0) | [`010b871`](https://github.com/jawills/sf-deploy/commit/010b871d96004925742c6307bbc17c6632865ddc) |
 

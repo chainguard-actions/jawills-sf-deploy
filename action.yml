@@ -1,0 +1,66 @@
+name: Salesforce Metadata Deploy
+description: Builds and deploys metadata to a specified environment
+
+inputs:
+  DRY_RUN:
+    description: "Validate deploy and run Apex tests but don't save to the org."
+    type: boolean
+  TEST_LEVEL:
+    description: "Deployment Apex testing level."
+    type: choice
+    default: RunLocalTests
+    options:
+      - NoTestRun
+      - RunSpecifiedTests
+      - RunLocalTests
+      - RunAllTestsInOrg
+  WAIT:
+    description: "Number of minutes to wait for command to complete and display results."
+    type: number
+    default: 30
+  SOURCE_DIRECTORY:
+    description: "Path to the local source files to deploy."
+    type: string
+    default: force-app
+  SFDX_AUTH_URL:
+    description: "The auth url tied to your deployment environment"
+    type: string
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Salesforce CLI
+      shell: bash
+      run: |
+        npm install -g @salesforce/cli
+        sf --version
+    - name: Login to Environment
+      shell: bash
+      env:
+        SFDX_AUTH_URL: ${{ inputs.SFDX_AUTH_URL }}
+      run: |
+        sf org login sfdx-url --set-default --sfdx-url-file <(echo "$SFDX_AUTH_URL")
+    - name: Generate package.xml
+      shell: bash
+      env:
+        SOURCE_DIRECTORY: ${{ inputs.SOURCE_DIRECTORY }}
+      run: |
+        sf project generate manifest --source-dir "$SOURCE_DIRECTORY" --output-dir manifest       
+    - name: Deploy to Environment
+      shell: bash
+      env:
+        WAIT: ${{ inputs.WAIT }}
+        TEST_LEVEL: ${{ inputs.TEST_LEVEL }}
+        DRY_RUN: ${{ inputs.DRY_RUN }}
+      run: |
+        deployFlags=(
+            --manifest manifest/package.xml
+            --wait "$WAIT"
+            --test-level "$TEST_LEVEL"
+            --verbose
+          )
+        if [ "$DRY_RUN" = "true" ]; then
+          deployFlags+=( --dry-run )
+        fi
+        sf project deploy start "${deployFlags[@]}"

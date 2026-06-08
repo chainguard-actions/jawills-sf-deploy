@@ -1,4 +1,4 @@
-name: Test dry-run deploy with DRY_RUN input
+name: Test basic deploy with SFDX_AUTH_URL
 on:
   workflow_dispatch:
 jobs:
@@ -14,12 +14,11 @@ jobs:
         uses: .
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
-          DRY_RUN: "true"
           TEST_LEVEL: RunLocalTests
           WAIT: 30
           SOURCE_DIRECTORY: force-app
         continue-on-error: true
-      - name: Assert action ran (dry-run attempted)
+      - name: Assert action ran (install and login attempted)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
@@ -30,4 +29,4 @@ jobs:
             echo "FAIL: action was skipped, expected it to run"
             exit 1
           fi
-          echo "PASS: action ran with DRY_RUN=true (outcome=$OUTCOME)"
+          echo "PASS: action ran (outcome=$OUTCOME)"

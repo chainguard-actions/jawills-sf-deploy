@@ -1,0 +1,29 @@
+name: Test dry run deploy
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create dummy force-app directory
+        run: mkdir -p force-app
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          SFDX_AUTH_URL: "force://PlatformCLI::dummy_token@example.salesforce.com"
+          DRY_RUN: "true"
+          TEST_LEVEL: RunLocalTests
+          WAIT: 1
+          SOURCE_DIRECTORY: force-app
+      - name: Assert action ran (login expected to fail without real org)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran (outcome=$OUTCOME)"

@@ -14,24 +14,25 @@ Action **jawills--sf-deploy/v2.0** was hardened automatically. 12 finding(s) wer
 
 ### script-injection (severity: high)
 
-Multiple `inputs.*` expressions are interpolated directly inside `run:` shell blocks without first being assigned to environment variables. This allows an attacker who controls the action inputs to inject arbitrary shell commands.
+Multiple `run:` steps in action.yml directly interpolate `inputs.*` expressions into shell commands without first assigning them to environment variables. This allows an attacker who controls the input values to inject arbitrary shell commands.
 
-**Login to Environment step (line ~68):** `${{ inputs.SFDX_AUTH_URL }}` is interpolated directly in the shell command.
+- **Login to Environment** (line 63): `${{ inputs.SFDX_AUTH_URL }}` is interpolated directly into the shell command: `sf org login sfdx-url --set-default --sfdx-url-file <(echo "${{ inputs.SFDX_AUTH_URL }}")`
+- **Generate package.xml** (line 68): `${{ inputs.SOURCE_DIRECTORY }}` is interpolated directly: `sf project generate manifest --source-dir ${{ inputs.SOURCE_DIRECTORY }} --output-dir manifest`
+- **Start deployment** (lines 71–89): `${{ inputs.MANIFEST_PATH }}`, `${{ inputs.TEST_LEVEL }}`, `${{ inputs.DRY_RUN }}`, `${{ inputs.DEPLOYMENT_ID }}`, and `${{ inputs.POST_DESTRUCTIVE_CHANGES }}` are all interpolated directly into the shell script.
+- **Resume Deployment** (line 96): `${{ inputs.WAIT }}` is interpolated directly: `sf project deploy resume -i "$(cat deployment-id.txt)" --wait ${{ inputs.WAIT }} --json`
 
-**Generate package.xml step (line ~73):** `${{ inputs.SOURCE_DIRECTORY }}` is interpolated directly in the shell command.
-
-**Start deployment step (lines ~77–93):** `${{ inputs.MANIFEST_PATH }}`, `${{ inputs.TEST_LEVEL }}`, `${{ inputs.DRY_RUN }}`, `${{ inputs.DEPLOYMENT_ID }}`, and `${{ inputs.POST_DESTRUCTIVE_CHANGES }}` are all interpolated directly in the shell script.
-
-**Resume Deployment step (line ~100):** `${{ inputs.WAIT }}` is interpolated directly in the shell command.
-
-All inputs should be passed via `env:` variables and referenced as `$VAR_NAME` in the shell script instead.
+Fix: assign each input to an `env:` variable on the step and reference `$ENV_VAR` in the shell script instead.
 
 Locations:
 
+- `action.yml:63`
 - `action.yml:68`
-- `action.yml:73`
-- `action.yml:77`
-- `action.yml:100`
+- `action.yml:71`
+- `action.yml:78`
+- `action.yml:82`
+- `action.yml:85`
+- `action.yml:88`
+- `action.yml:96`
 
 ### static-inline-injection (severity: high)
 
@@ -129,13 +130,15 @@ Locations:
 
 **Notes:**
 
-Fixed all script injection vulnerabilities in action.yml by moving ${{ inputs.* }} expressions from run: shell blocks into env: maps and referencing them as plain environment variables:
+Fixed all script injection vulnerabilities in action.yml by moving ${{ inputs.* }} expressions from run: shell blocks into env: blocks on each step:
 
 1. **Login to Environment**: Moved `${{ inputs.SFDX_AUTH_URL }}` to `env: SFDX_AUTH_URL:` and replaced inline expression with `$SFDX_AUTH_URL`.
 
 2. **Generate package.xml**: Moved `${{ inputs.SOURCE_DIRECTORY }}` to `env: SOURCE_DIRECTORY:` and replaced inline expression with `"$SOURCE_DIRECTORY"` (also added quotes for safety).
 
-3. **Start deployment**: Moved `${{ inputs.MANIFEST_PATH }}`, `${{ inputs.TEST_LEVEL }}`, `${{ inputs.DRY_RUN }}`, `${{ inputs.DEPLOYMENT_ID }}`, and `${{ inputs.POST_DESTRUCTIVE_CHANGES }}` to `env:` block and replaced all inline expressions with properly quoted `$VAR_NAME` references.
+3. **Start deployment**: Moved all five inputs (`MANIFEST_PATH`, `TEST_LEVEL`, `DRY_RUN`, `DEPLOYMENT_ID`, `POST_DESTRUCTIVE_CHANGES`) to `env:` block and replaced all inline expressions with their corresponding environment variable references. Also added proper quoting around variable references.
 
 4. **Resume Deployment**: Moved `${{ inputs.WAIT }}` to `env: WAIT:` and replaced inline expression with `"$WAIT"`.
+
+No unpinned actions or missing permissions findings were present in this action (it uses `runs: using: composite` with no `uses:` references in steps).
 

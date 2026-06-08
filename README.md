@@ -1,16 +1,41 @@
-# jawills/sf-deploy
+# Salesforce Deployment GitHub Actions
 
-Builds and deploys metadata to a specified environment
+Build the `package.xml` and deploy to Salesforce using this GitHub Action
 
-Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at [https://github.com/jawills/sf-deploy](https://github.com/jawills/sf-deploy).
+## Inputs
 
-## Versions
+```yml
+DRY_RUN:
+description: "Validate deploy and run Apex tests but don't save to the org."
+type: boolean
+TEST_LEVEL:
+description: "Deployment Apex testing level."
+type: choice
+default: 'RunLocalTests'
+options:
+    - NoTestRun
+    - RunSpecifiedTests
+    - RunLocalTests
+    - RunAllTestsInOrg
+WAIT:
+description: "Number of minutes to wait for command to complete and display results."
+type: number
+default: 30
+SOURCE_DIRECTORY:
+    description: "Path to the local source files to deploy."
+    type: string
+    default: 'force-app'
+SFDX_AUTH_URL:
+description: "The auth url tied to your deployment environment"
+type: string
+required: true
+```
+## Getting the SFDX Auth URL
 
-| Version | Tag | Upstream commit |
-|---------|-----|-----------------|
-| v0.4 | [`v0.4`](https://github.com/chainguard-actions/jawills-sf-deploy/tree/v0.4) | [`8cc73ce`](https://github.com/jawills/sf-deploy/commit/8cc73ced6e1ad109f6ced2d7692c3ae83f159a90) |
-| v1.0 | [`v1.0`](https://github.com/chainguard-actions/jawills-sf-deploy/tree/v1.0) | [`010b871`](https://github.com/jawills/sf-deploy/commit/010b871d96004925742c6307bbc17c6632865ddc) |
 
+## Usage
+
+You can see how these work by checking my [write-up]() or [YouTube video]().
 ## Privacy
 
 This Action contacts Chainguard's licensing server to verify authorization. Connection metadata (IP address, GitHub repository identifier, timestamp, and any metadata encoded in the auth token) is transmitted to Chainguard, Inc. even if authorization is denied in accordance with our [Privacy Notice](https://www.chainguard.dev/legal/privacy-notice)

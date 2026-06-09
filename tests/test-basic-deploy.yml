@@ -1,4 +1,4 @@
-name: Test dry run deploy
+name: Test basic deploy
 on:
   workflow_dispatch:
 jobs:
@@ -10,7 +10,6 @@ jobs:
         uses: .
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
-          DRY_RUN: "true"
           TEST_LEVEL: RunLocalTests
           WAIT: "10"
           SOURCE_DIRECTORY: force-app
@@ -23,7 +22,7 @@ jobs:
           if [ "$OUTCOME" = "success" ]; then
             echo "PASS: action succeeded"
           elif [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action failed as expected with invalid SFDX_AUTH_URL (dry-run path)"
+            echo "PASS: action failed as expected with invalid SFDX_AUTH_URL"
           else
             echo "FAIL: unexpected outcome: $OUTCOME"
             exit 1

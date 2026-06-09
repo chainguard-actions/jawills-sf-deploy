@@ -8,24 +8,32 @@
 
 **Harden Agent Version:** `1`
 
-Action **jawills--sf-deploy/v0.5** was hardened automatically. 6 finding(s) were identified and resolved across 1 iteration(s).
+Action **jawills--sf-deploy/v0.5** was hardened automatically. 8 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-Multiple `run:` steps in action.yml directly interpolate `inputs.*` expressions inside shell commands instead of first assigning them to environment variables. This allows an attacker-controlled input value to break out of the intended command context and execute arbitrary shell code.
-
-- Step "Login to Environment" (line 38): `${{ inputs.SFDX_AUTH_URL }}` is interpolated directly into the shell command.
-- Step "Generate package.xml" (line 43): `${{ inputs.SOURCE_DIRECTORY }}` is interpolated directly into the shell command.
-- Step "Deploy to Environment" (lines 49, 50, 52): `${{ inputs.WAIT }}`, `${{ inputs.TEST_LEVEL }}`, and `${{ inputs.DRY_RUN }}` are all interpolated directly into the shell command.
-
-Fix: assign each input to an `env:` variable on the step and reference it as `$ENV_VAR` in the `run:` block.
+The 'Login to Environment' step directly interpolates `${{ inputs.SFDX_AUTH_URL }}` into the shell command string. An attacker-controlled input value is embedded verbatim into the run: block without first being assigned to an environment variable, enabling script injection. The value should be passed via `env:` and referenced as `$SFDX_AUTH_URL`.
 
 Locations:
 
-- `action.yml:38`
+- `action.yml:39`
+
+### script-injection (severity: high)
+
+The 'Generate package.xml' step directly interpolates `${{ inputs.SOURCE_DIRECTORY }}` into the shell command string. An attacker-controlled input value is embedded verbatim into the run: block without first being assigned to an environment variable, enabling script injection. The value should be passed via `env:` and referenced as `$SOURCE_DIRECTORY`.
+
+Locations:
+
 - `action.yml:43`
+
+### script-injection (severity: high)
+
+The 'Deploy to Environment' step directly interpolates `${{ inputs.WAIT }}`, `${{ inputs.TEST_LEVEL }}`, and `${{ inputs.DRY_RUN }}` into the shell command string. All three attacker-controlled input values are embedded verbatim into the run: block without first being assigned to environment variables, enabling script injection. Each value should be passed via `env:` and referenced as shell variables.
+
+Locations:
+
 - `action.yml:49`
 - `action.yml:50`
 - `action.yml:52`
@@ -78,9 +86,8 @@ Locations:
 
 **Notes:**
 
-Fixed all 6 script injection findings in action.yml by moving ${{ inputs.* }} expressions out of run: shell blocks and into env: maps on each affected step:
-
-1. 'Login to Environment' step: moved ${{ inputs.SFDX_AUTH_URL }} to env: SFDX_AUTH_URL, updated run: to use $SFDX_AUTH_URL.
-2. 'Generate package.xml' step: moved ${{ inputs.SOURCE_DIRECTORY }} to env: SOURCE_DIRECTORY, updated run: to use "$SOURCE_DIRECTORY" (also added quotes for proper word splitting protection).
-3. 'Deploy to Environment' step: moved ${{ inputs.WAIT }}, ${{ inputs.TEST_LEVEL }}, and ${{ inputs.DRY_RUN }} to env: WAIT, TEST_LEVEL, DRY_RUN respectively, updated run: to reference $WAIT, $TEST_LEVEL, and $DRY_RUN as plain environment variables.
+Fixed all 8 script injection findings in action.yml across 3 steps:
+1. 'Login to Environment': Moved `${{ inputs.SFDX_AUTH_URL }}` to `env: SFDX_AUTH_URL:` and updated the run block to use `$SFDX_AUTH_URL`.
+2. 'Generate package.xml': Moved `${{ inputs.SOURCE_DIRECTORY }}` to `env: SOURCE_DIRECTORY:` and updated the run block to use `"$SOURCE_DIRECTORY"` (also added quotes for safety).
+3. 'Deploy to Environment': Moved `${{ inputs.WAIT }}`, `${{ inputs.TEST_LEVEL }}`, and `${{ inputs.DRY_RUN }}` to `env:` block and updated the run block to reference `$WAIT`, `$TEST_LEVEL`, and `$DRY_RUN` as plain shell variables.
 

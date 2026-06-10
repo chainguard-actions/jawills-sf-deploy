@@ -1,38 +1,50 @@
+<!-- markdownlint-disable -->
+
 # Hardening Report: jawills--sf-deploy/v2.0
 
 > This file was generated automatically by the hardening agent.
 
-**Policy SHA:** `ff50f15e4b79bfbf764dafdfd2579175a6ea9771`
+**Policy SHA:** `d636be7e43ef829af6e853da6b3c7566db9f72fe`
 
 **Test Policy SHA:** `843adf9e4b8f85d0c08b27b9d0b09dd094b54702`
 
 **Harden Agent Version:** `1`
 
-Action **jawills--sf-deploy/v2.0** was hardened automatically. 12 finding(s) were identified and resolved across 1 iteration(s).
+Action **jawills--sf-deploy/v2.0** was hardened automatically. 15 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-Multiple `run:` steps in action.yml directly interpolate `inputs.*` expressions into shell commands without first assigning them to environment variables. This allows an attacker who controls the input values to inject arbitrary shell commands.
-
-- **Login to Environment** (line 63): `${{ inputs.SFDX_AUTH_URL }}` is interpolated directly into the shell command: `sf org login sfdx-url --set-default --sfdx-url-file <(echo "${{ inputs.SFDX_AUTH_URL }}")`
-- **Generate package.xml** (line 68): `${{ inputs.SOURCE_DIRECTORY }}` is interpolated directly: `sf project generate manifest --source-dir ${{ inputs.SOURCE_DIRECTORY }} --output-dir manifest`
-- **Start deployment** (lines 71–89): `${{ inputs.MANIFEST_PATH }}`, `${{ inputs.TEST_LEVEL }}`, `${{ inputs.DRY_RUN }}`, `${{ inputs.DEPLOYMENT_ID }}`, and `${{ inputs.POST_DESTRUCTIVE_CHANGES }}` are all interpolated directly into the shell script.
-- **Resume Deployment** (line 96): `${{ inputs.WAIT }}` is interpolated directly: `sf project deploy resume -i "$(cat deployment-id.txt)" --wait ${{ inputs.WAIT }} --json`
-
-Fix: assign each input to an `env:` variable on the step and reference `$ENV_VAR` in the shell script instead.
+Sub-rule (a): The 'Login to Environment' step interpolates `${{ inputs.SFDX_AUTH_URL }}` directly inside a `run:` shell command string (`sf org login sfdx-url --set-default --sfdx-url-file <(echo "${{ inputs.SFDX_AUTH_URL }}")`). Any value supplied by the calling workflow is expanded by the YAML template engine before the shell sees it, enabling command injection.
 
 Locations:
 
-- `action.yml:63`
-- `action.yml:68`
+- `action.yml:62`
+
+### script-injection (severity: high)
+
+Sub-rule (a): The 'Generate package.xml' step interpolates `${{ inputs.SOURCE_DIRECTORY }}` directly and unquoted inside a `run:` shell command string (`sf project generate manifest --source-dir ${{ inputs.SOURCE_DIRECTORY }} --output-dir manifest`). An attacker-controlled value can inject shell metacharacters.
+
+Locations:
+
+- `action.yml:67`
+
+### script-injection (severity: high)
+
+Sub-rule (a): The 'Start deployment' step interpolates multiple `inputs.*` expressions directly inside a `run:` shell command string without routing through env vars: `${{ inputs.MANIFEST_PATH }}` (twice), `${{ inputs.TEST_LEVEL }}` (unquoted), `${{ inputs.DRY_RUN }}`, `${{ inputs.DEPLOYMENT_ID }}` (unquoted), and `${{ inputs.POST_DESTRUCTIVE_CHANGES }}`. Each of these allows an attacker-controlled value to be expanded by the YAML template engine before the shell parses it, enabling command injection.
+
+Locations:
+
 - `action.yml:71`
-- `action.yml:78`
-- `action.yml:82`
-- `action.yml:85`
-- `action.yml:88`
-- `action.yml:96`
+
+### script-injection (severity: high)
+
+Sub-rule (a): The 'Resume Deployment' step interpolates `${{ inputs.WAIT }}` directly inside a `run:` shell command string (`sf project deploy resume -i "$(cat deployment-id.txt)" --wait ${{ inputs.WAIT }} --json > resume-result.json`). The value is unquoted and expanded before the shell parses the command.
+
+Locations:
+
+- `action.yml:92`
 
 ### static-inline-injection (severity: high)
 
@@ -130,15 +142,15 @@ Locations:
 
 **Notes:**
 
-Fixed all script injection vulnerabilities in action.yml by moving ${{ inputs.* }} expressions from run: shell blocks into env: blocks on each step:
+Fixed all script injection vulnerabilities in action.yml by moving ${{ inputs.* }} expressions from run: shell command strings into env: blocks for each affected step:
 
-1. **Login to Environment**: Moved `${{ inputs.SFDX_AUTH_URL }}` to `env: SFDX_AUTH_URL:` and replaced inline expression with `$SFDX_AUTH_URL`.
+1. 'Login to Environment' step: Added env block with SFDX_AUTH_URL=${{ inputs.SFDX_AUTH_URL }}, replaced inline expression with $SFDX_AUTH_URL in the run: block.
 
-2. **Generate package.xml**: Moved `${{ inputs.SOURCE_DIRECTORY }}` to `env: SOURCE_DIRECTORY:` and replaced inline expression with `"$SOURCE_DIRECTORY"` (also added quotes for safety).
+2. 'Generate package.xml' step: Added env block with SOURCE_DIRECTORY=${{ inputs.SOURCE_DIRECTORY }}, replaced unquoted inline expression with quoted "$SOURCE_DIRECTORY" in the run: block.
 
-3. **Start deployment**: Moved all five inputs (`MANIFEST_PATH`, `TEST_LEVEL`, `DRY_RUN`, `DEPLOYMENT_ID`, `POST_DESTRUCTIVE_CHANGES`) to `env:` block and replaced all inline expressions with their corresponding environment variable references. Also added proper quoting around variable references.
+3. 'Start deployment' step: Added env block with MANIFEST_PATH, TEST_LEVEL, DRY_RUN, DEPLOYMENT_ID, and POST_DESTRUCTIVE_CHANGES all mapped from their respective inputs. Replaced all inline expressions with properly quoted environment variable references in the run: block.
 
-4. **Resume Deployment**: Moved `${{ inputs.WAIT }}` to `env: WAIT:` and replaced inline expression with `"$WAIT"`.
+4. 'Resume Deployment' step: Added env block with WAIT=${{ inputs.WAIT }}, replaced unquoted inline expression with quoted "$WAIT" in the run: block.
 
-No unpinned actions or missing permissions findings were present in this action (it uses `runs: using: composite` with no `uses:` references in steps).
+All remaining ${{ inputs.* }} expressions in the file are in env: map values or if: conditions, which are safe.
 

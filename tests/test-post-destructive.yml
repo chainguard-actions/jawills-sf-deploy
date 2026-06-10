@@ -1,4 +1,4 @@
-name: Test with deployment ID (resume mode)
+name: Test with post destructive changes
 on:
   workflow_dispatch:
 jobs:
@@ -11,16 +11,16 @@ jobs:
         continue-on-error: true
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::invalid_token@test.salesforce.com"
-          DEPLOYMENT_ID: "0Af000000000001AAA"
+          POST_DESTRUCTIVE_CHANGES: "destructiveChanges/destructiveChanges.xml"
           TEST_LEVEL: NoTestRun
           WAIT: 1
-      - name: Assert action ran with DEPLOYMENT_ID input
+      - name: Assert action ran with POST_DESTRUCTIVE_CHANGES input
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "outcome: $OUTCOME"
           if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action ran with DEPLOYMENT_ID input"
+            echo "PASS: action ran with POST_DESTRUCTIVE_CHANGES input"
           else
             echo "FAIL: unexpected outcome: $OUTCOME"
             exit 1

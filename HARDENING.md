@@ -1,42 +1,38 @@
+<!-- markdownlint-disable -->
+
 # Hardening Report: jawills--sf-deploy/v0.5
 
 > This file was generated automatically by the hardening agent.
 
-**Policy SHA:** `ff50f15e4b79bfbf764dafdfd2579175a6ea9771`
+**Policy SHA:** `d636be7e43ef829af6e853da6b3c7566db9f72fe`
 
 **Test Policy SHA:** `843adf9e4b8f85d0c08b27b9d0b09dd094b54702`
 
 **Harden Agent Version:** `1`
 
-Action **jawills--sf-deploy/v0.5** was hardened automatically. 8 finding(s) were identified and resolved across 1 iteration(s).
+Action **jawills--sf-deploy/v0.5** was hardened automatically. 6 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-The 'Login to Environment' step directly interpolates `${{ inputs.SFDX_AUTH_URL }}` into the shell command string. An attacker-controlled input value is embedded verbatim into the run: block without first being assigned to an environment variable, enabling script injection. The value should be passed via `env:` and referenced as `$SFDX_AUTH_URL`.
+Multiple `${{ inputs.* }}` expressions are directly interpolated inside `run:` shell command strings, violating rule (a). An attacker-controlled caller workflow can supply values containing shell metacharacters (`;`, `|`, `&`, `$(...)`, etc.) that will be executed by the shell before any quoting takes effect.
+
+1. Line 33 — `sf org login sfdx-url --set-default --sfdx-url-file <(echo "${{ inputs.SFDX_AUTH_URL }}")` — the auth URL is interpolated directly.
+2. Line 37 — `sf project generate manifest --source-dir ${{ inputs.SOURCE_DIRECTORY }} --output-dir manifest` — SOURCE_DIRECTORY is interpolated directly AND unquoted (also rule b).
+3. Line 44 — `--wait ${{ inputs.WAIT }}` — WAIT is interpolated directly.
+4. Line 45 — `--test-level ${{ inputs.TEST_LEVEL }}` — TEST_LEVEL is interpolated directly.
+5. Line 48 — `if [ "${{ inputs.DRY_RUN }}" = "true" ]` — DRY_RUN is interpolated directly.
+
+Fix: move each input into an `env:` variable and reference the env var (double-quoted) in the shell script instead of using `${{ }}` directly in the `run:` block.
 
 Locations:
 
-- `action.yml:39`
-
-### script-injection (severity: high)
-
-The 'Generate package.xml' step directly interpolates `${{ inputs.SOURCE_DIRECTORY }}` into the shell command string. An attacker-controlled input value is embedded verbatim into the run: block without first being assigned to an environment variable, enabling script injection. The value should be passed via `env:` and referenced as `$SOURCE_DIRECTORY`.
-
-Locations:
-
-- `action.yml:43`
-
-### script-injection (severity: high)
-
-The 'Deploy to Environment' step directly interpolates `${{ inputs.WAIT }}`, `${{ inputs.TEST_LEVEL }}`, and `${{ inputs.DRY_RUN }}` into the shell command string. All three attacker-controlled input values are embedded verbatim into the run: block without first being assigned to environment variables, enabling script injection. Each value should be passed via `env:` and referenced as shell variables.
-
-Locations:
-
-- `action.yml:49`
-- `action.yml:50`
-- `action.yml:52`
+- `action.yml:33`
+- `action.yml:37`
+- `action.yml:44`
+- `action.yml:45`
+- `action.yml:48`
 
 ### static-inline-injection (severity: high)
 
@@ -86,8 +82,11 @@ Locations:
 
 **Notes:**
 
-Fixed all 8 script injection findings in action.yml across 3 steps:
-1. 'Login to Environment': Moved `${{ inputs.SFDX_AUTH_URL }}` to `env: SFDX_AUTH_URL:` and updated the run block to use `$SFDX_AUTH_URL`.
-2. 'Generate package.xml': Moved `${{ inputs.SOURCE_DIRECTORY }}` to `env: SOURCE_DIRECTORY:` and updated the run block to use `"$SOURCE_DIRECTORY"` (also added quotes for safety).
-3. 'Deploy to Environment': Moved `${{ inputs.WAIT }}`, `${{ inputs.TEST_LEVEL }}`, and `${{ inputs.DRY_RUN }}` to `env:` block and updated the run block to reference `$WAIT`, `$TEST_LEVEL`, and `$DRY_RUN` as plain shell variables.
+Fixed all script injection findings in action.yml by moving all ${{ inputs.* }} expressions into env: blocks and referencing them as double-quoted environment variables in the shell scripts:
+
+1. 'Login to Environment' step: Added `env: SFDX_AUTH_URL: ${{ inputs.SFDX_AUTH_URL }}` and replaced `${{ inputs.SFDX_AUTH_URL }}` with `"$SFDX_AUTH_URL"` in the run block.
+
+2. 'Generate package.xml' step: Added `env: SOURCE_DIRECTORY: ${{ inputs.SOURCE_DIRECTORY }}` and replaced the unquoted `${{ inputs.SOURCE_DIRECTORY }}` with `"$SOURCE_DIRECTORY"` (also fixing the missing quotes issue).
+
+3. 'Deploy to Environment' step: Added `env:` block with WAIT, TEST_LEVEL, and DRY_RUN variables mapped from their respective inputs, and replaced all three `${{ inputs.* }}` expressions with double-quoted `"$WAIT"`, `"$TEST_LEVEL"`, and `"$DRY_RUN"` references in the shell script.
 

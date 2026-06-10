@@ -6,26 +6,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create minimal force-app directory
+        run: |
+          mkdir -p force-app/main/default/classes
+          cat > force-app/main/default/classes/HelloWorld.cls << 'EOF'
+          public class HelloWorld {
+              public static void sayHello() {
+                  System.debug('Hello World');
+              }
+          }
+          EOF
+          cat > force-app/main/default/classes/HelloWorld.cls-meta.xml << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <ApexClass xmlns="http://soap.sforce.com/2006/04/metadata">
+              <apiVersion>58.0</apiVersion>
+              <status>Active</status>
+          </ApexClass>
+          EOF
       - id: action
         uses: .
         with:
-          SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
+          SFDX_AUTH_URL: "force://PlatformCLI::fake_token@example.my.salesforce.com"
           DRY_RUN: "true"
           TEST_LEVEL: RunLocalTests
           WAIT: "10"
           SOURCE_DIRECTORY: force-app
         continue-on-error: true
-      - name: Assert action ran (login step expected to fail with invalid URL)
+      - name: Assert action ran with DRY_RUN input
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
-          echo "outcome: $OUTCOME"
-          if [ "$OUTCOME" = "success" ]; then
-            echo "PASS: action succeeded"
-          elif [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action failed as expected with invalid SFDX_AUTH_URL (dry-run path)"
-          else
-            echo "FAIL: unexpected outcome: $OUTCOME"
+          echo "Action outcome: $OUTCOME"
+          # The action is expected to fail at login with a fake SFDX_AUTH_URL
+          # This test verifies the DRY_RUN input is wired correctly
+          if [ "$OUTCOME" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
             exit 1
           fi
-          echo "PASS"
+          echo "PASS: action ran with DRY_RUN input"

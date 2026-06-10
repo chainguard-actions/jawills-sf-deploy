@@ -49,7 +49,7 @@ runs:
       env:
         SOURCE_DIRECTORY: ${{ inputs.SOURCE_DIRECTORY }}
       run: |
-        sf project generate manifest --source-dir "$SOURCE_DIRECTORY" --output-dir manifest       
+        sf project generate manifest --source-dir "$SOURCE_DIRECTORY" --output-dir manifest
     - name: Deploy to Environment
       shell: bash
       env:

@@ -1,4 +1,4 @@
-name: Test dry-run deploy with DRY_RUN input
+name: Test dry-run mode (DRY_RUN covered)
 on:
   workflow_dispatch:
 jobs:
@@ -7,27 +7,23 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Create dummy source directory
-        run: |
-          mkdir -p force-app
-          echo "dummy" > force-app/dummy.txt
+        run: mkdir -p force-app
       - id: action
         uses: .
-        with:
-          SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
-          DRY_RUN: "true"
-          TEST_LEVEL: RunLocalTests
-          WAIT: 30
-          SOURCE_DIRECTORY: force-app
         continue-on-error: true
-      - name: Assert action ran (dry-run attempted)
-        env:
-          OUTCOME: ${{ steps.action.outcome }}
+        with:
+          SFDX_AUTH_URL: "force://PlatformCLI::invalid_token@test.salesforce.com"
+          DRY_RUN: true
+          TEST_LEVEL: RunLocalTests
+          WAIT: 1
+          SOURCE_DIRECTORY: force-app
+      - name: Assert action was invoked with DRY_RUN input
         run: |
-          echo "outcome: $OUTCOME"
-          # The action is expected to fail at login/deploy without real credentials
-          # but it must have been attempted (not skipped)
-          if [ "$OUTCOME" = "skipped" ]; then
-            echo "FAIL: action was skipped, expected it to run"
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          # The action is expected to fail at login since we have no real Salesforce org.
+          # We only verify it was invoked and not skipped (not a setup error).
+          if [ "${{ steps.action.outcome }}" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
             exit 1
           fi
-          echo "PASS: action ran with DRY_RUN=true (outcome=$OUTCOME)"
+          echo "PASS: action was invoked with DRY_RUN=true and SFDX_AUTH_URL inputs"

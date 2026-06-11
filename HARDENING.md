@@ -1,41 +1,39 @@
+<!-- markdownlint-disable -->
+
 # Hardening Report: jawills--sf-deploy/v0.4
 
 > This file was generated automatically by the hardening agent.
 
-**Policy SHA:** `ff50f15e4b79bfbf764dafdfd2579175a6ea9771`
+**Policy SHA:** `d636be7e43ef829af6e853da6b3c7566db9f72fe`
 
 **Test Policy SHA:** `843adf9e4b8f85d0c08b27b9d0b09dd094b54702`
 
 **Harden Agent Version:** `1`
 
-Action **jawills--sf-deploy/v0.4** was hardened automatically. 7 finding(s) were identified and resolved across 1 iteration(s).
+Action **jawills--sf-deploy/v0.4** was hardened automatically. 5 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-The 'Login to Environment' step directly interpolates `${{ inputs.SFDX_AUTH_URL }}` into the shell command string inside a run: block. An attacker-controlled input value is embedded directly in the shell command rather than being passed via an env: variable, enabling script injection.
+Multiple `run:` blocks in action.yml directly interpolate `${{ inputs.* }}` expressions into shell commands (rule a), allowing an attacker-controlled value to execute arbitrary shell code.
+
+1. **Login to Environment** (line ~36): `sf org login sfdx-url --set-default --sfdx-url-file <(echo "${{ inputs.SFDX_AUTH_URL }}")` — the SFDX_AUTH_URL input is interpolated directly into a process substitution.
+
+2. **Generate package.xml** (line ~40): `sf project generate manifest --source-dir ${{ inputs.SOURCE_DIRECTORY }} --output-dir manifest` — SOURCE_DIRECTORY is interpolated unquoted into the shell command, enabling word-splitting and glob expansion as well as command injection.
+
+3. **Deploy to Environment** (line ~46): `--test-level ${{ inputs.TEST_LEVEL }}` — TEST_LEVEL is interpolated unquoted inside a bash array literal.
+
+4. **Deploy to Environment** (line ~49): `if [ "${{ inputs.DRY_RUN }}" = "true" ]` — DRY_RUN is interpolated inside a quoted string in a test expression.
+
+All four occurrences must be replaced with `env:` block mappings and the resulting shell variables must be properly double-quoted.
 
 Locations:
 
-- `action.yml:39`
-
-### script-injection (severity: high)
-
-The 'Generate package.xml' step directly interpolates `${{ inputs.SOURCE_DIRECTORY }}` into the shell command string inside a run: block. An attacker-controlled input value is embedded directly in the shell command rather than being passed via an env: variable, enabling script injection.
-
-Locations:
-
-- `action.yml:43`
-
-### script-injection (severity: high)
-
-The 'Deploy to Environment' step directly interpolates `${{ inputs.TEST_LEVEL }}` and `${{ inputs.DRY_RUN }}` into the shell command string inside a run: block. Attacker-controlled input values are embedded directly in the shell command rather than being passed via env: variables, enabling script injection.
-
-Locations:
-
-- `action.yml:50`
-- `action.yml:52`
+- `action.yml:36`
+- `action.yml:40`
+- `action.yml:46`
+- `action.yml:49`
 
 ### static-inline-injection (severity: high)
 
@@ -77,11 +75,13 @@ Locations:
 
 **Notes:**
 
-Fixed all 7 script injection findings in action.yml by moving ${{ inputs.* }} expressions from run: blocks into env: blocks for each affected step:
+Fixed all four script injection issues in action.yml by moving ${{ inputs.* }} expressions into env: blocks for each affected step:
 
-1. 'Login to Environment' step: Moved `${{ inputs.SFDX_AUTH_URL }}` to env block as `SFDX_AUTH_URL`, updated run: to use `$SFDX_AUTH_URL`.
-2. 'Generate package.xml' step: Moved `${{ inputs.SOURCE_DIRECTORY }}` to env block as `SOURCE_DIRECTORY`, updated run: to use `"$SOURCE_DIRECTORY"` (quoted for safety).
-3. 'Deploy to Environment' step: Moved `${{ inputs.TEST_LEVEL }}` and `${{ inputs.DRY_RUN }}` to env block as `TEST_LEVEL` and `DRY_RUN`, updated run: to use `"$TEST_LEVEL"` and `"$DRY_RUN"` respectively.
+1. **Login to Environment** (line ~36): Moved `${{ inputs.SFDX_AUTH_URL }}` to `env: SFDX_AUTH_URL: ${{ inputs.SFDX_AUTH_URL }}` and replaced the inline expression with `"$SFDX_AUTH_URL"` in the process substitution.
 
-No other findings (unpinned-uses, missing-permissions) were present in the findings list.
+2. **Generate package.xml** (line ~40): Moved `${{ inputs.SOURCE_DIRECTORY }}` to `env: SOURCE_DIRECTORY: ${{ inputs.SOURCE_DIRECTORY }}` and replaced the unquoted inline expression with `"$SOURCE_DIRECTORY"` (properly double-quoted).
+
+3. **Deploy to Environment** - TEST_LEVEL (line ~46): Moved `${{ inputs.TEST_LEVEL }}` to `env: TEST_LEVEL: ${{ inputs.TEST_LEVEL }}` and replaced the unquoted inline expression with `"$TEST_LEVEL"` inside the bash array literal.
+
+4. **Deploy to Environment** - DRY_RUN (line ~49): Moved `${{ inputs.DRY_RUN }}` to `env: DRY_RUN: ${{ inputs.DRY_RUN }}` and replaced the inline expression with `"$DRY_RUN"` in the test expression.
 

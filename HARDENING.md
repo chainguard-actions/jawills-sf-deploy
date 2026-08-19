@@ -8,7 +8,7 @@
 
 **Test Policy SHA:** `843adf9e4b8f85d0c08b27b9d0b09dd094b54702`
 
-**Harden Agent Version:** `1`
+**Harden Agent Version:** `2`
 
 Action **jawills--sf-deploy/v0.4** was hardened automatically. 5 finding(s) were identified and resolved across 1 iteration(s).
 
@@ -16,24 +16,21 @@ Action **jawills--sf-deploy/v0.4** was hardened automatically. 5 finding(s) were
 
 ### script-injection (severity: high)
 
-Multiple `run:` blocks in action.yml directly interpolate `${{ inputs.* }}` expressions into shell commands (rule a), allowing an attacker-controlled value to execute arbitrary shell code.
+Multiple `run:` blocks in action.yml directly interpolate `${{ inputs.* }}` expressions into shell commands (rule a). This allows an attacker who controls the input values to inject arbitrary shell commands.
 
-1. **Login to Environment** (line ~36): `sf org login sfdx-url --set-default --sfdx-url-file <(echo "${{ inputs.SFDX_AUTH_URL }}")` — the SFDX_AUTH_URL input is interpolated directly into a process substitution.
+1. "Login to Environment" step: `sf org login sfdx-url --set-default --sfdx-url-file <(echo "${{ inputs.SFDX_AUTH_URL }}")` — the auth URL is interpolated directly into the shell command.
+2. "Generate package.xml" step: `sf project generate manifest --source-dir ${{ inputs.SOURCE_DIRECTORY }} --output-dir manifest` — SOURCE_DIRECTORY is interpolated unquoted.
+3. "Deploy to Environment" step: `--test-level ${{ inputs.TEST_LEVEL }}` — TEST_LEVEL is interpolated unquoted into an array element.
+4. "Deploy to Environment" step: `if [ "${{ inputs.DRY_RUN }}" = "true" ]` — DRY_RUN is interpolated inside a test expression.
 
-2. **Generate package.xml** (line ~40): `sf project generate manifest --source-dir ${{ inputs.SOURCE_DIRECTORY }} --output-dir manifest` — SOURCE_DIRECTORY is interpolated unquoted into the shell command, enabling word-splitting and glob expansion as well as command injection.
-
-3. **Deploy to Environment** (line ~46): `--test-level ${{ inputs.TEST_LEVEL }}` — TEST_LEVEL is interpolated unquoted inside a bash array literal.
-
-4. **Deploy to Environment** (line ~49): `if [ "${{ inputs.DRY_RUN }}" = "true" ]` — DRY_RUN is interpolated inside a quoted string in a test expression.
-
-All four occurrences must be replaced with `env:` block mappings and the resulting shell variables must be properly double-quoted.
+Fix: move each input into an `env:` block and reference it as a quoted shell variable (e.g. `"$SOURCE_DIRECTORY"`).
 
 Locations:
 
-- `action.yml:36`
-- `action.yml:40`
-- `action.yml:46`
-- `action.yml:49`
+- `action.yml:38`
+- `action.yml:43`
+- `action.yml:51`
+- `action.yml:53`
 
 ### static-inline-injection (severity: high)
 
@@ -75,13 +72,9 @@ Locations:
 
 **Notes:**
 
-Fixed all four script injection issues in action.yml by moving ${{ inputs.* }} expressions into env: blocks for each affected step:
+Fixed all 5 findings (1 script-injection + 4 static-inline-injection) in action.yml by moving ${{ inputs.* }} expressions into env: blocks for each affected step:
 
-1. **Login to Environment** (line ~36): Moved `${{ inputs.SFDX_AUTH_URL }}` to `env: SFDX_AUTH_URL: ${{ inputs.SFDX_AUTH_URL }}` and replaced the inline expression with `"$SFDX_AUTH_URL"` in the process substitution.
-
-2. **Generate package.xml** (line ~40): Moved `${{ inputs.SOURCE_DIRECTORY }}` to `env: SOURCE_DIRECTORY: ${{ inputs.SOURCE_DIRECTORY }}` and replaced the unquoted inline expression with `"$SOURCE_DIRECTORY"` (properly double-quoted).
-
-3. **Deploy to Environment** - TEST_LEVEL (line ~46): Moved `${{ inputs.TEST_LEVEL }}` to `env: TEST_LEVEL: ${{ inputs.TEST_LEVEL }}` and replaced the unquoted inline expression with `"$TEST_LEVEL"` inside the bash array literal.
-
-4. **Deploy to Environment** - DRY_RUN (line ~49): Moved `${{ inputs.DRY_RUN }}` to `env: DRY_RUN: ${{ inputs.DRY_RUN }}` and replaced the inline expression with `"$DRY_RUN"` in the test expression.
+1. 'Login to Environment' step: moved `${{ inputs.SFDX_AUTH_URL }}` to `env: SFDX_AUTH_URL:` and changed the run command to use `"$SFDX_AUTH_URL"`.
+2. 'Generate package.xml' step: moved `${{ inputs.SOURCE_DIRECTORY }}` to `env: SOURCE_DIRECTORY:` and changed the run command to use `"$SOURCE_DIRECTORY"`.
+3. 'Deploy to Environment' step: moved both `${{ inputs.TEST_LEVEL }}` and `${{ inputs.DRY_RUN }}` to `env:` block and changed the run script to reference `"$TEST_LEVEL"` and `"$DRY_RUN"` as quoted shell variables.
 

@@ -1,0 +1,58 @@
+name: Test with NoTestRun test level
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Create a minimal source directory
+      - name: Create source directory
+        run: |
+          mkdir -p force-app/main/default/classes
+          cat > force-app/main/default/classes/MyClass.cls << 'EOF'
+          public class MyClass {}
+          EOF
+          cat > force-app/main/default/classes/MyClass.cls-meta.xml << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <ApexClass xmlns="http://soap.sforce.com/2006/04/metadata">
+              <apiVersion>58.0</apiVersion>
+              <status>Active</status>
+          </ApexClass>
+          EOF
+
+      # Invoke the action with NoTestRun test level
+      - name: Invoke action with NoTestRun test level
+        id: action
+        uses: .
+        with:
+          DRY_RUN: "false"
+          TEST_LEVEL: NoTestRun
+          WAIT: "5"
+          SOURCE_DIRECTORY: force-app
+          SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
+        continue-on-error: true
+
+      - name: Assert action failed at login (not at CLI install)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "action outcome: $OUTCOME"
+          # With a fake SFDX_AUTH_URL, the action should fail at login
+          if [ "$OUTCOME" = "success" ]; then
+            echo "WARN: action succeeded unexpectedly (real org connected?)"
+          else
+            echo "PASS: action failed as expected with fake SFDX_AUTH_URL"
+          fi
+
+      # Verify SF CLI was installed by the action
+      - name: Verify SF CLI was installed
+        run: |
+          if ! command -v sf &> /dev/null; then
+            echo "FAIL: sf CLI was not installed by the action"
+            exit 1
+          fi
+          SF_VERSION=$(sf --version 2>&1 || true)
+          echo "SF CLI version: $SF_VERSION"
+          echo "PASS: SF CLI is available"

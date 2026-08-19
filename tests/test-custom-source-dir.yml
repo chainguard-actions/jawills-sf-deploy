@@ -1,4 +1,4 @@
-name: Test basic usage - default inputs
+name: Test custom source directory input
 on:
   workflow_dispatch:
 jobs:
@@ -7,32 +7,33 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create default source directory
+      - name: Create custom source directory
         run: |
-          mkdir -p force-app/main/default
-          echo "PASS: default source directory 'force-app' created"
+          mkdir -p src/main/default
+          echo "PASS: custom source directory 'src' created"
 
-      - name: Run action with default inputs (expected to fail at login)
+      - name: Attempt action with custom SOURCE_DIRECTORY (expected to fail at login)
         id: action
         uses: .
         continue-on-error: true
         with:
+          DRY_RUN: "false"
           TEST_LEVEL: RunLocalTests
-          WAIT: 10
-          SOURCE_DIRECTORY: force-app
+          WAIT: 5
+          SOURCE_DIRECTORY: src
           SFDX_AUTH_URL: "force://PlatformCLI::invalid_token@invalid.salesforce.com"
 
-      - name: Assert action failed at login (not at CLI install)
+      - name: Assert action failed at login with custom source directory
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "action outcome: $OUTCOME"
-          # The action should fail because the SFDX_AUTH_URL is invalid
-          # but it should NOT fail at the CLI install step
+          # The action should fail at login because the SFDX_AUTH_URL is invalid
+          # It should NOT fail because the source directory doesn't exist
           if [ "$OUTCOME" = "failure" ]; then
             echo "PASS: action failed as expected (invalid SFDX_AUTH_URL)"
           elif [ "$OUTCOME" = "success" ]; then
-            echo "WARN: action unexpectedly succeeded - may indicate a real org was connected"
+            echo "WARN: action unexpectedly succeeded"
           else
             echo "FAIL: unexpected outcome: $OUTCOME"
             exit 1

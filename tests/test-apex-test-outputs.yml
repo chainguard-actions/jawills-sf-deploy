@@ -1,4 +1,4 @@
-name: Test deploy with explicit MANIFEST_PATH (mocked sf CLI)
+name: Test apex test result outputs (mocked sf CLI)
 on:
   workflow_dispatch:
 jobs:
@@ -7,15 +7,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create mock sf binary
+      - name: Create mock sf binary with test results
         run: |
           mkdir -p "$HOME/.local/bin"
 
           cat > "$HOME/.local/bin/sf" << 'SFEOF'
           #!/usr/bin/env bash
-          # Log all calls for assertion
-          echo "$*" >> /tmp/sf-calls.log
-
           case "$*" in
             *"--version"*)
               echo "@salesforce/cli/2.0.0 linux-x64 node-v18.0.0"
@@ -26,41 +23,57 @@ jobs:
               exit 0
               ;;
             *"project generate manifest"*)
-              # This should NOT be called when MANIFEST_PATH is set
-              echo "ERROR: generate manifest should not be called when MANIFEST_PATH is set" >&2
-              exit 1
+              mkdir -p manifest
+              cat > manifest/package.xml << 'XMLEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Package xmlns="http://soap.sforce.com/2006/04/metadata">
+              <version>58.0</version>
+          </Package>
+          XMLEOF
+              exit 0
               ;;
             *"project deploy start"*)
-              echo '{"status":0,"result":{"id":"0Af000000000003CCC","status":"Pending"}}'
+              echo '{"status":0,"result":{"id":"0Af000000000004DDD","status":"Pending"}}'
               exit 0
               ;;
             *"project deploy resume"*)
+              # Return a result with Apex test data including code coverage
               echo '{
                 "status": 0,
                 "result": {
-                  "id": "0Af000000000003CCC",
+                  "id": "0Af000000000004DDD",
                   "status": "Succeeded",
                   "checkOnly": false,
-                  "numberComponentsDeployed": 2,
+                  "numberComponentsDeployed": 1,
                   "numberComponentErrors": 0,
                   "details": {
                     "componentSuccesses": [
                       {
                         "fullName": "MyClass",
                         "componentType": "ApexClass",
-                        "created": true,
-                        "changed": false,
-                        "deleted": false
-                      },
-                      {
-                        "fullName": "MyTrigger",
-                        "componentType": "ApexTrigger",
                         "created": false,
                         "changed": true,
                         "deleted": false
                       }
                     ],
-                    "componentFailures": []
+                    "componentFailures": [],
+                    "runTestResult": {
+                      "numTestsRun": 5,
+                      "numFailures": 0,
+                      "failures": [],
+                      "codeCoverage": [
+                        {
+                          "name": "MyClass",
+                          "numLocations": 100,
+                          "numLocationsNotCovered": 20
+                        },
+                        {
+                          "name": "AnotherClass",
+                          "numLocations": 50,
+                          "numLocationsNotCovered": 5
+                        }
+                      ]
+                    }
                   }
                 }
               }'
@@ -83,56 +96,49 @@ jobs:
 
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Create a custom manifest file
-        run: |
-          mkdir -p custom-manifest
-          cat > custom-manifest/package.xml << 'XMLEOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <Package xmlns="http://soap.sforce.com/2006/04/metadata">
-              <types>
-                  <members>MyClass</members>
-                  <name>ApexClass</name>
-              </types>
-              <version>58.0</version>
-          </Package>
-          XMLEOF
+      - name: Create dummy source directory
+        run: mkdir -p force-app
 
       - id: action
         uses: .
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::mock_token@mock.salesforce.com"
-          MANIFEST_PATH: "custom-manifest/package.xml"
-          TEST_LEVEL: "NoTestRun"
+          TEST_LEVEL: "RunLocalTests"
           WAIT: "1"
 
-      - name: Assert generate manifest was NOT called
-        run: |
-          echo "sf calls log:"
-          cat /tmp/sf-calls.log || echo "(no log file)"
-          if grep -q "project generate manifest" /tmp/sf-calls.log; then
-            echo "FAIL: 'project generate manifest' should not be called when MANIFEST_PATH is set"
-            exit 1
-          fi
-          echo "PASS: generate manifest was correctly skipped"
-
-      - name: Assert custom manifest was used in deploy start
-        run: |
-          if ! grep -q "custom-manifest/package.xml" /tmp/sf-calls.log; then
-            echo "FAIL: custom manifest path not found in sf deploy start call"
-            exit 1
-          fi
-          echo "PASS: custom manifest path was used"
-
-      - name: Assert deployment_id output
+      - name: Assert tests_run output
         env:
-          ACTUAL: ${{ steps.action.outputs.deployment_id }}
+          ACTUAL: ${{ steps.action.outputs.tests_run }}
         run: |
-          echo "actual deployment_id: $ACTUAL"
-          if [ -z "$ACTUAL" ]; then
-            echo "FAIL: deployment_id should not be empty"
+          echo "actual tests_run: $ACTUAL"
+          if [ "$ACTUAL" != "5" ]; then
+            echo "FAIL: expected tests_run='5', got '$ACTUAL'"
             exit 1
           fi
-          echo "PASS: deployment_id=$ACTUAL"
+          echo "PASS"
+
+      - name: Assert tests_failed output
+        env:
+          ACTUAL: ${{ steps.action.outputs.tests_failed }}
+        run: |
+          echo "actual tests_failed: $ACTUAL"
+          if [ "$ACTUAL" != "0" ]; then
+            echo "FAIL: expected tests_failed='0', got '$ACTUAL'"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert apex_org_wide_coverage_percent output
+        env:
+          ACTUAL: ${{ steps.action.outputs.apex_org_wide_coverage_percent }}
+        run: |
+          echo "actual apex_org_wide_coverage_percent: $ACTUAL"
+          # 100+50=150 total, 20+5=25 not covered, so 125/150 = 83.33%
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: apex_org_wide_coverage_percent should not be empty"
+            exit 1
+          fi
+          echo "PASS: apex_org_wide_coverage_percent=$ACTUAL"
 
       - name: Assert deploy_status output
         env:

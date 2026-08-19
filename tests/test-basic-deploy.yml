@@ -1,4 +1,4 @@
-name: Test dry run (validate) deployment
+name: Test basic deployment
 on:
   workflow_dispatch:
 jobs:
@@ -14,16 +14,20 @@ jobs:
           # Mock npm to skip actual install
           cat > "$HOME/.local/bin/npm" << 'NPMEOF'
           #!/bin/sh
+          # If installing @salesforce/cli, do nothing (sf mock is already on PATH)
           echo "npm mock: $*"
           exit 0
           NPMEOF
           chmod +x "$HOME/.local/bin/npm"
 
+          # Fake deployment ID
+          FAKE_ID="0Af000000000001AAA"
+
           # Mock sf CLI
-          cat > "$HOME/.local/bin/sf" << 'SFEOF'
+          cat > "$HOME/.local/bin/sf" << SFEOF
           #!/bin/sh
-          echo "sf mock: $*" >&2
-          case "$*" in
+          echo "sf mock: \$*" >&2
+          case "\$*" in
             *"--version"*)
               echo "@salesforce/cli/2.0.0 linux-x64 node-v18.0.0"
               exit 0
@@ -38,14 +42,7 @@ jobs:
               exit 0
               ;;
             *"project deploy start"*)
-              # Validate that --dry-run flag is present
-              case "$*" in
-                *"--dry-run"*)
-                  echo '{"status":0,"result":{"id":"0Af000000000002BBB","status":"Pending"}}' ;;
-                *)
-                  echo "FAIL: --dry-run flag not passed to deploy start" >&2
-                  exit 1 ;;
-              esac
+              echo '{"status":0,"result":{"id":"${FAKE_ID}","status":"Pending"}}'
               exit 0
               ;;
             *"project deploy resume"*)
@@ -53,14 +50,26 @@ jobs:
           {
             "status": 0,
             "result": {
-              "id": "0Af000000000002BBB",
+              "id": "0Af000000000001AAA",
               "status": "Succeeded",
-              "checkOnly": true,
-              "numberComponentsDeployed": 0,
+              "checkOnly": false,
+              "numberComponentsDeployed": 2,
               "numberComponentErrors": 0,
               "details": {
-                "componentSuccesses": [],
-                "componentFailures": []
+                "componentSuccesses": [
+                  {"fullName": "MyClass", "componentType": "ApexClass", "created": false, "changed": true, "deleted": false},
+                  {"fullName": "MyTrigger", "componentType": "ApexTrigger", "created": true, "changed": false, "deleted": false}
+                ],
+                "componentFailures": [],
+                "runTestResult": {
+                  "numTestsRun": "5",
+                  "numFailures": "0",
+                  "failures": [],
+                  "codeCoverage": [
+                    {"name": "MyClass", "numLocations": "10", "numLocationsNotCovered": "2"},
+                    {"name": "MyTrigger", "numLocations": "8", "numLocationsNotCovered": "1"}
+                  ]
+                }
               }
             }
           }
@@ -68,7 +77,7 @@ jobs:
               exit 0
               ;;
             *)
-              echo "Unknown sf command: $*" >&2
+              echo "Unknown sf command: \$*" >&2
               exit 1
               ;;
           esac
@@ -84,7 +93,6 @@ jobs:
         uses: .
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
-          DRY_RUN: "true"
           TEST_LEVEL: RunLocalTests
           WAIT: 10
           SOURCE_DIRECTORY: force-app
@@ -100,7 +108,7 @@ jobs:
           fi
           echo "PASS: deployment_id=$ACTUAL"
 
-      - name: Assert deploy_status is Succeeded
+      - name: Assert deploy_status output
         env:
           ACTUAL: ${{ steps.action.outputs.deploy_status }}
         run: |
@@ -110,3 +118,36 @@ jobs:
             exit 1
           fi
           echo "PASS"
+
+      - name: Assert tests_run output
+        env:
+          ACTUAL: ${{ steps.action.outputs.tests_run }}
+        run: |
+          echo "actual tests_run: $ACTUAL"
+          if [ "$ACTUAL" != "5" ]; then
+            echo "FAIL: expected tests_run=5, got: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert tests_failed output
+        env:
+          ACTUAL: ${{ steps.action.outputs.tests_failed }}
+        run: |
+          echo "actual tests_failed: $ACTUAL"
+          if [ "$ACTUAL" != "0" ]; then
+            echo "FAIL: expected tests_failed=0, got: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert apex_org_wide_coverage_percent output
+        env:
+          ACTUAL: ${{ steps.action.outputs.apex_org_wide_coverage_percent }}
+        run: |
+          echo "actual apex_org_wide_coverage_percent: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: apex_org_wide_coverage_percent should not be empty"
+            exit 1
+          fi
+          echo "PASS: coverage=$ACTUAL%"

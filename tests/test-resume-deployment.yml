@@ -1,4 +1,4 @@
-name: Test dry run (validate) deployment
+name: Test resume deployment with existing deployment ID
 on:
   workflow_dispatch:
 jobs:
@@ -38,12 +38,13 @@ jobs:
               exit 0
               ;;
             *"project deploy start"*)
-              # Validate that --dry-run flag is present
+              # Validate that --job-id flag is present when DEPLOYMENT_ID is set
               case "$*" in
-                *"--dry-run"*)
-                  echo '{"status":0,"result":{"id":"0Af000000000002BBB","status":"Pending"}}' ;;
+                *"--job-id"*)
+                  echo '{"status":0,"result":{"id":"0Af000000000004DDD","status":"Pending"}}' ;;
                 *)
-                  echo "FAIL: --dry-run flag not passed to deploy start" >&2
+                  echo "FAIL: --job-id flag not passed to deploy start" >&2
+                  echo "Got: $*" >&2
                   exit 1 ;;
               esac
               exit 0
@@ -53,14 +54,23 @@ jobs:
           {
             "status": 0,
             "result": {
-              "id": "0Af000000000002BBB",
+              "id": "0Af000000000004DDD",
               "status": "Succeeded",
-              "checkOnly": true,
-              "numberComponentsDeployed": 0,
+              "checkOnly": false,
+              "numberComponentsDeployed": 3,
               "numberComponentErrors": 0,
               "details": {
-                "componentSuccesses": [],
-                "componentFailures": []
+                "componentSuccesses": [
+                  {"fullName": "ClassA", "componentType": "ApexClass", "created": false, "changed": true, "deleted": false},
+                  {"fullName": "ClassB", "componentType": "ApexClass", "created": true, "changed": false, "deleted": false},
+                  {"fullName": "TriggerA", "componentType": "ApexTrigger", "created": false, "changed": true, "deleted": false}
+                ],
+                "componentFailures": [],
+                "runTestResult": {
+                  "numTestsRun": "10",
+                  "numFailures": "0",
+                  "failures": []
+                }
               }
             }
           }
@@ -84,12 +94,12 @@ jobs:
         uses: .
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
-          DRY_RUN: "true"
+          DEPLOYMENT_ID: "0Af000000000004DDD"
           TEST_LEVEL: RunLocalTests
           WAIT: 10
           SOURCE_DIRECTORY: force-app
 
-      - name: Assert deployment_id output
+      - name: Assert deployment_id output matches provided ID
         env:
           ACTUAL: ${{ steps.action.outputs.deployment_id }}
         run: |
@@ -107,6 +117,17 @@ jobs:
           echo "actual deploy_status: $ACTUAL"
           if [ "$ACTUAL" != "Succeeded" ]; then
             echo "FAIL: expected deploy_status=Succeeded, got: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert tests_run output
+        env:
+          ACTUAL: ${{ steps.action.outputs.tests_run }}
+        run: |
+          echo "actual tests_run: $ACTUAL"
+          if [ "$ACTUAL" != "10" ]; then
+            echo "FAIL: expected tests_run=10, got: $ACTUAL"
             exit 1
           fi
           echo "PASS"

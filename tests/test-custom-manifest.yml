@@ -1,4 +1,4 @@
-name: Test dry run (validate) deployment
+name: Test custom manifest path deployment
 on:
   workflow_dispatch:
 jobs:
@@ -19,6 +19,10 @@ jobs:
           NPMEOF
           chmod +x "$HOME/.local/bin/npm"
 
+          # Track whether generate manifest was called (it should NOT be)
+          MANIFEST_CALLED_FILE="/tmp/manifest_called"
+          rm -f "$MANIFEST_CALLED_FILE"
+
           # Mock sf CLI
           cat > "$HOME/.local/bin/sf" << 'SFEOF'
           #!/bin/sh
@@ -33,17 +37,19 @@ jobs:
               exit 0
               ;;
             *"project generate manifest"*)
-              mkdir -p manifest
-              echo '<?xml version="1.0" encoding="UTF-8"?><Package xmlns="http://soap.sforce.com/2006/04/metadata"><version>58.0</version></Package>' > manifest/package.xml
-              exit 0
+              # This should NOT be called when MANIFEST_PATH is set
+              touch /tmp/manifest_called
+              echo "ERROR: generate manifest should not be called when MANIFEST_PATH is set" >&2
+              exit 1
               ;;
             *"project deploy start"*)
-              # Validate that --dry-run flag is present
+              # Validate that the custom manifest path is used
               case "$*" in
-                *"--dry-run"*)
-                  echo '{"status":0,"result":{"id":"0Af000000000002BBB","status":"Pending"}}' ;;
+                *"custom/package.xml"*)
+                  echo '{"status":0,"result":{"id":"0Af000000000003CCC","status":"Pending"}}' ;;
                 *)
-                  echo "FAIL: --dry-run flag not passed to deploy start" >&2
+                  echo "FAIL: custom manifest path not passed to deploy start" >&2
+                  echo "Got: $*" >&2
                   exit 1 ;;
               esac
               exit 0
@@ -53,13 +59,15 @@ jobs:
           {
             "status": 0,
             "result": {
-              "id": "0Af000000000002BBB",
+              "id": "0Af000000000003CCC",
               "status": "Succeeded",
-              "checkOnly": true,
-              "numberComponentsDeployed": 0,
+              "checkOnly": false,
+              "numberComponentsDeployed": 1,
               "numberComponentErrors": 0,
               "details": {
-                "componentSuccesses": [],
+                "componentSuccesses": [
+                  {"fullName": "MyClass", "componentType": "ApexClass", "created": false, "changed": true, "deleted": false}
+                ],
                 "componentFailures": []
               }
             }
@@ -77,17 +85,35 @@ jobs:
 
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Create source directory
-        run: mkdir -p force-app
+      - name: Create custom manifest file
+        run: |
+          mkdir -p custom
+          cat > custom/package.xml << 'XMLEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Package xmlns="http://soap.sforce.com/2006/04/metadata">
+            <types>
+              <members>MyClass</members>
+              <name>ApexClass</name>
+            </types>
+            <version>58.0</version>
+          </Package>
+          XMLEOF
 
       - id: action
         uses: .
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
-          DRY_RUN: "true"
-          TEST_LEVEL: RunLocalTests
+          MANIFEST_PATH: "custom/package.xml"
+          TEST_LEVEL: NoTestRun
           WAIT: 10
-          SOURCE_DIRECTORY: force-app
+
+      - name: Assert generate manifest was NOT called
+        run: |
+          if [ -f /tmp/manifest_called ]; then
+            echo "FAIL: project generate manifest was called even though MANIFEST_PATH was set"
+            exit 1
+          fi
+          echo "PASS: generate manifest was correctly skipped"
 
       - name: Assert deployment_id output
         env:

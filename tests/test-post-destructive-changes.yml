@@ -1,4 +1,4 @@
-name: Test with post destructive changes
+name: Test post-destructive-changes deployment
 on:
   workflow_dispatch:
 jobs:
@@ -6,23 +6,109 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up mock Salesforce CLI
+        run: |
+          mkdir -p "$HOME/.local/bin"
+
+          # Mock npm to skip actual install
+          cat > "$HOME/.local/bin/npm" << 'NPMEOF'
+          #!/bin/sh
+          echo "npm mock: $*"
+          exit 0
+          NPMEOF
+          chmod +x "$HOME/.local/bin/npm"
+
+          # Mock sf CLI
+          cat > "$HOME/.local/bin/sf" << 'SFEOF'
+          #!/bin/sh
+          echo "sf mock: $*" >&2
+          case "$*" in
+            *"--version"*)
+              echo "@salesforce/cli/2.0.0 linux-x64 node-v18.0.0"
+              exit 0
+              ;;
+            *"org login sfdx-url"*)
+              echo '{"status":0,"result":{"orgId":"00D000000000001AAA","username":"test@example.com"}}'
+              exit 0
+              ;;
+            *"project generate manifest"*)
+              mkdir -p manifest
+              echo '<?xml version="1.0" encoding="UTF-8"?><Package xmlns="http://soap.sforce.com/2006/04/metadata"><version>58.0</version></Package>' > manifest/package.xml
+              exit 0
+              ;;
+            *"project deploy start"*)
+              # Validate that --post-destructive-changes flag is present
+              case "$*" in
+                *"--post-destructive-changes"*)
+                  echo '{"status":0,"result":{"id":"0Af000000000003CCC","status":"Pending"}}' ;;
+                *)
+                  echo "FAIL: --post-destructive-changes flag not passed to deploy start" >&2
+                  exit 1 ;;
+              esac
+              exit 0
+              ;;
+            *"project deploy resume"*)
+              cat << 'RESUMEJSON'
+          {
+            "status": 0,
+            "result": {
+              "id": "0Af000000000003CCC",
+              "status": "Succeeded",
+              "checkOnly": false,
+              "numberComponentsDeployed": 1,
+              "numberComponentErrors": 0,
+              "details": {
+                "componentSuccesses": [
+                  {"fullName": "OldClass", "componentType": "ApexClass", "created": false, "changed": false, "deleted": true}
+                ],
+                "componentFailures": []
+              }
+            }
+          }
+          RESUMEJSON
+              exit 0
+              ;;
+            *)
+              echo "Unknown sf command: $*" >&2
+              exit 1
+              ;;
+          esac
+          SFEOF
+          chmod +x "$HOME/.local/bin/sf"
+
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Create source directory
+        run: mkdir -p force-app
+
       - id: action
         uses: .
         with:
-          SFDX_AUTH_URL: "force://PlatformCLI::invalid_token@test.salesforce.com"
+          SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
+          TEST_LEVEL: RunLocalTests
+          WAIT: 10
+          SOURCE_DIRECTORY: force-app
           POST_DESTRUCTIVE_CHANGES: "destructiveChanges/destructiveChanges.xml"
-          TEST_LEVEL: NoTestRun
-          WAIT: 1
-        continue-on-error: true
-      - name: Assert action ran with POST_DESTRUCTIVE_CHANGES (expected to fail without real credentials)
+
+      - name: Assert deployment_id output
         env:
-          OUTCOME: ${{ steps.action.outcome }}
+          ACTUAL: ${{ steps.action.outputs.deployment_id }}
         run: |
-          echo "action outcome: $OUTCOME"
-          # The action is expected to fail because SFDX_AUTH_URL is invalid.
-          # We just verify it ran (not skipped).
-          if [ "$OUTCOME" = "skipped" ]; then
-            echo "FAIL: action was skipped, expected it to run"
+          echo "actual deployment_id: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: deployment_id should not be empty"
             exit 1
           fi
-          echo "PASS: action ran with POST_DESTRUCTIVE_CHANGES set (outcome=$OUTCOME)"
+          echo "PASS: deployment_id=$ACTUAL"
+
+      - name: Assert deploy_status is Succeeded
+        env:
+          ACTUAL: ${{ steps.action.outputs.deploy_status }}
+        run: |
+          echo "actual deploy_status: $ACTUAL"
+          if [ "$ACTUAL" != "Succeeded" ]; then
+            echo "FAIL: expected deploy_status=Succeeded, got: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS"

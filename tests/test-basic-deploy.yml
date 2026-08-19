@@ -6,25 +6,75 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up mock sf CLI and npm
+        run: |
+          mkdir -p "$HOME/.local/bin"
+
+          # Mock npm that installs a fake sf
+          cat > "$HOME/.local/bin/npm" << 'EOF'
+          #!/bin/sh
+          # If installing @salesforce/cli, do nothing (fake sf is already on PATH)
+          echo "npm mock: $*"
+          exit 0
+          EOF
+          chmod +x "$HOME/.local/bin/npm"
+
+          # Mock sf CLI
+          cat > "$HOME/.local/bin/sf" << 'EOF'
+          #!/bin/sh
+          echo "sf mock called with: $*"
+          case "$*" in
+            *--version*)
+              echo "sf/2.0.0 linux-x64 node-v18.0.0"
+              ;;
+            *"org login sfdx-url"*)
+              echo "Successfully authorized test@example.com"
+              ;;
+            *"project generate manifest"*)
+              # Create the manifest directory and package.xml
+              mkdir -p manifest
+              cat > manifest/package.xml << 'PKGEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Package xmlns="http://soap.sforce.com/2006/04/metadata">
+              <version>57.0</version>
+          </Package>
+          PKGEOF
+              echo "Generated manifest/package.xml"
+              ;;
+            *"project deploy start"*)
+              echo "Deploy ID: 0Af000000000001"
+              echo "Status: Succeeded"
+              echo "Deployed 0 source files to test org"
+              ;;
+            *)
+              echo "Unknown sf command: $*"
+              exit 1
+              ;;
+          esac
+          exit 0
+          EOF
+          chmod +x "$HOME/.local/bin/sf"
+
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Create source directory
+        run: mkdir -p force-app
+
       - id: action
         uses: .
         with:
-          SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
+          SFDX_AUTH_URL: "force://PlatformCLI::fake-token@test.salesforce.com"
           TEST_LEVEL: RunLocalTests
           WAIT: "10"
           SOURCE_DIRECTORY: force-app
-        continue-on-error: true
-      - name: Assert action ran (login step expected to fail with invalid URL)
-        env:
-          OUTCOME: ${{ steps.action.outcome }}
+
+      - name: Assert action succeeded
         run: |
-          echo "outcome: $OUTCOME"
-          if [ "$OUTCOME" = "success" ]; then
-            echo "PASS: action succeeded"
-          elif [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action failed as expected with invalid SFDX_AUTH_URL"
-          else
-            echo "FAIL: unexpected outcome: $OUTCOME"
+          echo "Action completed successfully"
+          if [ ! -f manifest/package.xml ]; then
+            echo "FAIL: manifest/package.xml was not created"
             exit 1
           fi
-          echo "PASS"
+          echo "PASS: manifest/package.xml exists"
+          cat manifest/package.xml

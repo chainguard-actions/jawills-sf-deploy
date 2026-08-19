@@ -1,4 +1,4 @@
-name: Test dry run deploy
+name: Test NoTestRun test level
 on:
   workflow_dispatch:
 jobs:
@@ -41,16 +41,11 @@ jobs:
               echo "Generated manifest/package.xml"
               ;;
             *"project deploy start"*)
-              # Record the flags used
+              # Record the full command for assertion
               echo "$*" > /tmp/sf-deploy-flags.txt
-              if echo "$*" | grep -q -- "--dry-run"; then
-                echo "DRY RUN: Validating deployment (not saving to org)"
-                echo "Validation ID: 0Af000000000002"
-                echo "Status: Succeeded"
-              else
-                echo "FAIL: expected --dry-run flag but it was not present"
-                exit 1
-              fi
+              echo "Deploy ID: 0Af000000000003"
+              echo "Status: Succeeded"
+              echo "Deployed 0 source files to test org"
               ;;
             *)
               echo "Unknown sf command: $*"
@@ -70,12 +65,11 @@ jobs:
         uses: .
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::fake-token@test.salesforce.com"
-          DRY_RUN: "true"
-          TEST_LEVEL: RunLocalTests
-          WAIT: "10"
+          TEST_LEVEL: NoTestRun
+          WAIT: "5"
           SOURCE_DIRECTORY: force-app
 
-      - name: Assert dry-run flag was passed
+      - name: Assert NoTestRun test level was passed
         run: |
           echo "Checking deploy flags..."
           if [ ! -f /tmp/sf-deploy-flags.txt ]; then
@@ -84,9 +78,15 @@ jobs:
           fi
           DEPLOY_FLAGS=$(cat /tmp/sf-deploy-flags.txt)
           echo "Deploy flags: $DEPLOY_FLAGS"
-          if echo "$DEPLOY_FLAGS" | grep -q -- "--dry-run"; then
-            echo "PASS: --dry-run flag was present"
+          if echo "$DEPLOY_FLAGS" | grep -q "NoTestRun"; then
+            echo "PASS: NoTestRun test level was present"
           else
-            echo "FAIL: --dry-run flag was not found in deploy command"
+            echo "FAIL: NoTestRun test level was not found in deploy command"
             exit 1
           fi
+          # Also verify --dry-run is NOT present (not a dry run)
+          if echo "$DEPLOY_FLAGS" | grep -q -- "--dry-run"; then
+            echo "FAIL: --dry-run should not be present for a non-dry-run deploy"
+            exit 1
+          fi
+          echo "PASS: --dry-run correctly absent"

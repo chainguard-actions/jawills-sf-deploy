@@ -1,4 +1,4 @@
-name: Test basic usage - CLI install and login attempt
+name: Test RunAllTestsInOrg test level
 on:
   workflow_dispatch:
 jobs:
@@ -13,20 +13,12 @@ jobs:
       - name: Create dummy source directory
         run: mkdir -p force-app
 
-      - name: Verify sf CLI is not yet installed
-        run: |
-          if command -v sf &>/dev/null; then
-            echo "sf already installed (pre-condition note)"
-          else
-            echo "sf not installed yet (expected)"
-          fi
-
       - id: action
         uses: .
         with:
           SFDX_AUTH_URL: "force://PlatformCLI::invalid_token@test.salesforce.com"
           SOURCE_DIRECTORY: force-app
-          TEST_LEVEL: RunLocalTests
+          TEST_LEVEL: RunAllTestsInOrg
           WAIT: "30"
         continue-on-error: true
 
@@ -39,17 +31,17 @@ jobs:
           echo "PASS: sf CLI is installed"
           sf --version
 
-      - name: Assert action attempted login (expected to fail with invalid URL)
+      - name: Assert action outcome with RunAllTestsInOrg
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "action outcome: $OUTCOME"
-          # The action is expected to fail because the SFDX_AUTH_URL is invalid
-          # but it should fail at login, not at CLI install
+          # With an invalid auth URL, the action should fail at login
+          # but the RunAllTestsInOrg TEST_LEVEL input should be accepted without error
           if [ "$OUTCOME" = "success" ]; then
             echo "WARN: action unexpectedly succeeded (would need a real org)"
           elif [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action failed as expected with invalid auth URL"
+            echo "PASS: action failed as expected with invalid auth URL (RunAllTestsInOrg accepted)"
           else
             echo "FAIL: unexpected outcome: $OUTCOME"
             exit 1

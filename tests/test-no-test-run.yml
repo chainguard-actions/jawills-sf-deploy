@@ -1,4 +1,4 @@
-name: Test dry-run input flag
+name: Test TEST_LEVEL=NoTestRun input
 on:
   workflow_dispatch:
 jobs:
@@ -25,26 +25,25 @@ jobs:
           </ApexClass>
           EOF
 
-      - name: Run action with DRY_RUN=true (expect failure at login step)
+      - name: Run action with TEST_LEVEL=NoTestRun (expect failure at login step)
         id: action
         uses: .
         with:
           SFDX_AUTH_URL: "force://invalid_client_id:invalid_secret:invalid_token@login.salesforce.com"
-          DRY_RUN: "true"
-          TEST_LEVEL: RunLocalTests
+          TEST_LEVEL: NoTestRun
           WAIT: 10
           SOURCE_DIRECTORY: force-app
         continue-on-error: true
 
-      - name: Assert action failed at login (DRY_RUN flag accepted)
+      - name: Assert action failed at login (TEST_LEVEL=NoTestRun accepted)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "outcome: $OUTCOME"
           # The action should fail at login, not at input parsing or CLI install
-          # This confirms DRY_RUN=true is accepted as a valid input
+          # This confirms TEST_LEVEL=NoTestRun is accepted as a valid input
           if [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action correctly failed with invalid auth URL (DRY_RUN flag accepted)"
+            echo "PASS: action correctly failed with invalid auth URL (TEST_LEVEL=NoTestRun accepted)"
           else
             echo "FAIL: expected action to fail with invalid auth URL, got: $OUTCOME"
             exit 1

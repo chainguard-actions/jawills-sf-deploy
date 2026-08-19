@@ -1,4 +1,4 @@
-name: Test dry-run input flag
+name: Test custom SOURCE_DIRECTORY input
 on:
   workflow_dispatch:
 jobs:
@@ -7,17 +7,17 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create minimal source directory
+      - name: Create custom source directory
         run: |
-          mkdir -p force-app/main/default/classes
-          cat > force-app/main/default/classes/HelloWorld.cls << 'EOF'
-          public class HelloWorld {
-              public static void sayHello() {
-                  System.debug('Hello World');
+          mkdir -p src/main/default/classes
+          cat > src/main/default/classes/MyClass.cls << 'EOF'
+          public class MyClass {
+              public static String greet(String name) {
+                  return 'Hello, ' + name + '!';
               }
           }
           EOF
-          cat > force-app/main/default/classes/HelloWorld.cls-meta.xml << 'EOF'
+          cat > src/main/default/classes/MyClass.cls-meta.xml << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <ApexClass xmlns="http://soap.sforce.com/2006/04/metadata">
               <apiVersion>58.0</apiVersion>
@@ -25,26 +25,25 @@ jobs:
           </ApexClass>
           EOF
 
-      - name: Run action with DRY_RUN=true (expect failure at login step)
+      - name: Run action with custom SOURCE_DIRECTORY (expect failure at login step)
         id: action
         uses: .
         with:
           SFDX_AUTH_URL: "force://invalid_client_id:invalid_secret:invalid_token@login.salesforce.com"
-          DRY_RUN: "true"
           TEST_LEVEL: RunLocalTests
           WAIT: 10
-          SOURCE_DIRECTORY: force-app
+          SOURCE_DIRECTORY: src
         continue-on-error: true
 
-      - name: Assert action failed at login (DRY_RUN flag accepted)
+      - name: Assert action failed at login (custom SOURCE_DIRECTORY accepted)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "outcome: $OUTCOME"
           # The action should fail at login, not at input parsing or CLI install
-          # This confirms DRY_RUN=true is accepted as a valid input
+          # This confirms SOURCE_DIRECTORY=src is accepted as a valid input
           if [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action correctly failed with invalid auth URL (DRY_RUN flag accepted)"
+            echo "PASS: action correctly failed with invalid auth URL (custom SOURCE_DIRECTORY accepted)"
           else
             echo "FAIL: expected action to fail with invalid auth URL, got: $OUTCOME"
             exit 1

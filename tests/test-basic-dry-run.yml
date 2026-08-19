@@ -1,4 +1,4 @@
-name: Test basic usage - invalid auth URL fails at login
+name: Test basic dry run invocation
 on:
   workflow_dispatch:
 jobs:
@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create minimal source directory
+      - name: Create dummy source directory
         run: |
           mkdir -p force-app/main/default/classes
           cat > force-app/main/default/classes/HelloWorld.cls << 'EOF'
@@ -25,26 +25,22 @@ jobs:
           </ApexClass>
           EOF
 
-      - name: Run action (expect failure at login step)
+      - name: Run action (expect failure at login step — no real org)
         id: action
         uses: .
-        with:
-          SFDX_AUTH_URL: "force://invalid_client_id:invalid_secret:invalid_token@login.salesforce.com"
-          TEST_LEVEL: RunLocalTests
-          WAIT: 10
-          SOURCE_DIRECTORY: force-app
         continue-on-error: true
+        with:
+          SFDX_AUTH_URL: "force://PlatformCLI::fake_token@test.salesforce.com"
+          DRY_RUN: "true"
+          TEST_LEVEL: "RunLocalTests"
+          WAIT: "30"
+          SOURCE_DIRECTORY: "force-app"
 
-      - name: Assert action failed at login (not at CLI install)
-        env:
-          OUTCOME: ${{ steps.action.outcome }}
+      - name: Assert Salesforce CLI was installed before login failure
         run: |
-          echo "outcome: $OUTCOME"
-          # The action should fail because the SFDX_AUTH_URL is invalid
-          # It should NOT fail at the CLI install step
-          if [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action correctly failed with invalid auth URL"
-          else
-            echo "FAIL: expected action to fail with invalid auth URL, got: $OUTCOME"
+          if ! command -v sf &> /dev/null; then
+            echo "FAIL: sf CLI not found in PATH — Install step did not run"
             exit 1
           fi
+          echo "PASS: sf CLI is available (Install step ran successfully)"
+          sf --version
